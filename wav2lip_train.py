@@ -73,6 +73,28 @@ class Dataset(object):
 
         return window
 
+    @staticmethod
+    def read_window_with_mouth(window_fnames):
+        if window_fnames is None:
+            return None
+        window = []
+        mouth_window = []
+        for fname in window_fnames:
+            img = cv2.imread(fname)
+            if img is None:
+                return None
+            try:
+                mouth_weight = FaceManager.get_mouth_weights(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY),
+                                                             1.2, 1.4, (hparams.img_size, hparams.img_size))
+                img = cv2.resize(img, (hparams.img_size, hparams.img_size))
+            except Exception as e:
+                return None
+
+            window.append(img)
+            mouth_window.append(mouth_weight)
+
+        return window, mouth_window
+
     def crop_audio_window(self, spec, start_frame):
         if type(start_frame) == int:
             start_frame_num = start_frame
@@ -134,7 +156,8 @@ class Dataset(object):
             if window is None:
                 continue
 
-            wrong_window = self.read_window(wrong_window_fnames)
+            # wrong_window = self.read_window(wrong_window_fnames)
+            wrong_window, mouth_window = self.read_window_with_mouth(wrong_window_fnames)
             if wrong_window is None:
                 continue
 
@@ -162,7 +185,8 @@ class Dataset(object):
             window[:, :, window.shape[2]//2:] = 0.
 
             wrong_window = self.prepare_window(wrong_window)
-            x = np.concatenate([window, wrong_window], axis=0)
+            mouth_window = self.prepare_window(mouth_window)
+            x = np.concatenate([window, wrong_window, mouth_window], axis=0)
 
             x = torch.FloatTensor(x)
             mel = torch.FloatTensor(mel.T).unsqueeze(0)

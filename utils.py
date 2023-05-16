@@ -89,3 +89,7 @@ def save_important_info(loss, g, global_step, checkpoint_dir, mode='train'):
     ssim_txt_path = os.path.join(checkpoint_dir, f'{mode}_ssim.txt')
     with open(ssim_txt_path, 'a') as ssim_txt:
         ssim_txt.write(f'{global_step} {cal_mean_performance(g, calculate_ssim)}')
+
+
+def get_frame_mouth(frame, dst_size):
+    return frame
