@@ -16,6 +16,7 @@ from glob import glob
 
 import os, random, cv2, argparse
 from hparams import hparams, get_image_list
+from utils import save_important_info
 
 parser = argparse.ArgumentParser(description='Code to train the Wav2Lip model without the visual quality discriminator')
 
@@ -113,14 +114,17 @@ class Dataset(object):
             idx = random.randint(0, len(self.all_videos) - 1)
             vidname = self.all_videos[idx]
             img_names = list(glob(join(vidname, '*.jpg')))
+            # 防止片段太短，选取的两个帧序列出现很多重合
             if len(img_names) <= 3 * syncnet_T:
                 continue
-            
+
+            # 随机选择两张图片
             img_name = random.choice(img_names)
             wrong_img_name = random.choice(img_names)
             while wrong_img_name == img_name:
                 wrong_img_name = random.choice(img_names)
 
+            # 截取两个片段内的图片
             window_fnames = self.get_window(img_name)
             wrong_window_fnames = self.get_window(wrong_img_name)
             if window_fnames is None or wrong_window_fnames is None:
@@ -142,16 +146,19 @@ class Dataset(object):
             except Exception as e:
                 continue
 
+            # 截取对应时间窗口对应的mel频谱图
             mel = self.crop_audio_window(orig_mel.copy(), img_name)
             
             if (mel.shape[0] != syncnet_mel_step_size):
                 continue
 
+            # 个人语音特征的mel音谱图，配合窗口mel频谱图学习嘴唇变化信息
             indiv_mels = self.get_segmented_mels(orig_mel.copy(), img_name)
             if indiv_mels is None: continue
 
             window = self.prepare_window(window)
             y = window.copy()
+            # 把嘴部区域去掉了，作为生成结果空间
             window[:, :, window.shape[2]//2:] = 0.
 
             wrong_window = self.prepare_window(wrong_window)
@@ -231,7 +238,10 @@ def train(device, model, train_data_loader, test_data_loader, optimizer,
             optimizer.step()
 
             if global_step % checkpoint_interval == 0:
+                # 输出训练样本
                 save_sample_images(x, g, gt, global_step, checkpoint_dir)
+                # 记录损失变化和关键指标的变化
+                save_important_info(loss, g, global_step, checkpoint_dir)
 
             global_step += 1
             cur_session_steps = global_step - resumed_step
@@ -286,6 +296,8 @@ def eval_model(test_data_loader, global_step, device, model, checkpoint_dir):
             if step > eval_steps: 
                 averaged_sync_loss = sum(sync_losses) / len(sync_losses)
                 averaged_recon_loss = sum(recon_losses) / len(recon_losses)
+                save_important_info('L1: {}, Sync loss: {}'.format(averaged_recon_loss, averaged_sync_loss),
+                                    g, global_step, checkpoint_dir, 'eval')
 
                 print('L1: {}, Sync loss: {}'.format(averaged_recon_loss, averaged_sync_loss))
 
