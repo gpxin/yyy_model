@@ -1,8 +1,9 @@
-import os.path
+import os
 
 import numpy as np
 import cv2
 import math
+import torch
 
 
 def calculate_psnr(img1, img2, border=0):
@@ -72,20 +73,29 @@ def ssim(img1, img2):
     return ssim_map.mean()
 
 
-def cal_mean_performance(image_seq, performance_fn):
+def cal_mean_performance(image_batch, performance_fn):
     performance_score_list = []
-    for img_idx in range(image_seq.shape[0]-1):
-        performance_score_list.append(performance_fn(image_seq[img_idx], image_seq[img_idx+1]))
+    for image_seq in image_batch:
+        image_seq = image_seq.detach().cpu().numpy()
+        image_seq = np.transpose(image_seq, [1, 2, 3, 0])
+        for img_idx in range(image_seq.shape[0]-1):
+            performance_score_list.append(performance_fn(image_seq[img_idx], image_seq[img_idx+1]))
     return sum(performance_score_list) / len(performance_score_list)
 
 
 def save_important_info(loss, g, global_step, checkpoint_dir, mode='train'):
     loss_txt_path = os.path.join(checkpoint_dir, f'{mode}_loss.txt')
+    if os.path.exists(loss_txt_path):
+        os.remove(loss_txt_path)
     with open(loss_txt_path, 'a') as loss_txt:
-        loss_txt.write(f'{global_step} {loss}')
+        loss_txt.write(f'{global_step} {torch.mean(loss) if mode=="train" else loss}\n')
     psnr_txt_path = os.path.join(checkpoint_dir, f'{mode}_psnr.txt')
+    if os.path.exists(psnr_txt_path):
+        os.remove(psnr_txt_path)
     with open(psnr_txt_path, 'a') as psnr_txt:
-        psnr_txt.write(f'{global_step} {cal_mean_performance(g, calculate_psnr)}')
+        psnr_txt.write(f'{global_step} {cal_mean_performance(g, calculate_psnr)} \n')
     ssim_txt_path = os.path.join(checkpoint_dir, f'{mode}_ssim.txt')
+    if os.path.exists(ssim_txt_path):
+        os.remove(ssim_txt_path)
     with open(ssim_txt_path, 'a') as ssim_txt:
-        ssim_txt.write(f'{global_step} {cal_mean_performance(g, calculate_ssim)}')
+        ssim_txt.write(f'{global_step} {cal_mean_performance(g, calculate_ssim)} \n')
